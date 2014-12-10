@@ -8,6 +8,7 @@ var express  = require('express'),
     radiodan = radiodanClient.create(),
     player   = radiodan.player.get('main'),
     fs = require('fs'),
+    path = require('path'),
     port     = process.env.PORT || 5000;
 
 app.engine('mustache', mustacheExpress());
@@ -25,6 +26,9 @@ var config = readOrCreateConfigWithDefaults(
   { feedUrl: 'https://huffduffer.com/libbymiller/rss' }
 );
 
+console.log("config is");
+console.log(config);
+
 app.get('/rss', function (req, res) {
   res.render('config', { feedUrl: config.feedUrl });
 });
@@ -34,7 +38,13 @@ app.post('/rss', function (req, res) {
     config.feedUrl = req.body.feedUrl;
     writeConfig('./config.json', config);
   }
-  res.redirect('back');
+  config = readOrCreateConfigWithDefaults('./config.json',null);
+  console.log("new config");
+  console.log(config);
+  request(config.feedUrl,getRSSAndAddToPlaylist);
+
+//  res.redirect('back');
+  res.redirect('/');
 });
 
 app.listen(port);
@@ -58,7 +68,10 @@ powerButton.on("press", stopPlaying);
 powerButton.on("release", startPlaying);
 
 console.log('Reading feedUrl', config.feedUrl);
-request(config.feedUrl, function (err, data) {
+request(config.feedUrl,getRSSAndAddToPlaylist);
+
+
+function getRSSAndAddToPlaylist(err, data) {
   if (err) {
     console.error('Error fetching feed');
     console.error(err.stack);
@@ -73,24 +86,38 @@ request(config.feedUrl, function (err, data) {
     playlist: urls,
     clear: true
   });
-});
+}
+
 
 function gracefulExit() {
   console.log('Exiting...');
   player.clear().then(process.exit);
 }
 
-function readOrCreateConfigWithDefaults(path, defaults) {
-  if ( fs.existsSync(path) ) {
-    return require(path);
+function readOrCreateConfigWithDefaults(file, defaults) {
+  console.log("path is "+file);
+  console.log("fs exists "+fs.existsSync(file)+" process "+process.env.HOME);
+  var fullPath = __dirname;
+  var fullFile = path.join(fullPath,file);
+  console.log(fs.existsSync(fullFile));
+  if ( fs.existsSync(fullFile) ) {
+    return require(file);
   } else {
-    writeConfig(path, defaults);
+    writeConfig(fullFile, defaults);
     return defaults;
   }
 }
 
-function writeConfig(path, config) {
-  fs.writeFileSync(path, JSON.stringify(config));
+function writeConfig(file, config) {
+
+  var fullPath = __dirname;
+  var fullFile = path.join(fullPath,file);
+  console.log("writing config path "+file+" config "+JSON.stringify(config));
+  try{
+    fs.writeFileSync(file, JSON.stringify(config));
+  }catch(e){
+    console.log("problem writing to file "+e);
+  }
 }
 
 process.on('SIGTERM', gracefulExit);
