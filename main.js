@@ -35,19 +35,44 @@ app.get('/rss', function (req, res) {
 
 app.post('/rss', function (req, res) {
   if (req.body && req.body.feedUrl) {
-    config.feedUrl = req.body.feedUrl;
-    writeConfig('./config.json', config);
+     addFeedURL(req.body.feedUrl, req,res);
   }
+
+  res.redirect('/');
+});
+
+app.post('/rssFromNFC', function (req, res) {
+  if (req.body && req.body.feedUrl) {
+
+     var powerLED      = radiodan.RGBLED.get('power');
+     powerLED.emit({
+      emit: true,
+      colour: [100,100,0],
+     });
+     addFeedURL(req.body.feedUrl);
+  }
+
+  res.redirect('/');
+});
+
+
+app.listen(port);
+
+     var powerLED      = radiodan.RGBLED.get('power');
+     powerLED.emit({
+      emit: true,
+      colour: [0,0,200],
+     });
+
+function addFeedURL(feedUrl){
+  config.feedUrl = feedUrl;
+  writeConfig('./config.json', config);
   config = readOrCreateConfigWithDefaults('./config.json',null);
   console.log("new config");
   console.log(config);
   request(config.feedUrl,getRSSAndAddToPlaylist);
 
-//  res.redirect('back');
-  res.redirect('/');
-});
-
-app.listen(port);
+}
 
 function extractUrlFromEnclosure(index, item) {
   return cheerio(item).attr('url');
@@ -78,6 +103,8 @@ function getRSSAndAddToPlaylist(err, data) {
     return;
   }
 
+  var powerLED      = radiodan.RGBLED.get('power');
+
   var doc = cheerio(data.body);
   var urls = doc.find('enclosure')
                 .map(extractUrlFromEnclosure)
@@ -85,7 +112,12 @@ function getRSSAndAddToPlaylist(err, data) {
   player.add({
     playlist: urls,
     clear: true
-  });
+  }).then(startPlaying()).then(
+     powerLED.emit({
+      emit: true,
+      colour: [0,0,100],
+     })
+  );
 }
 
 
