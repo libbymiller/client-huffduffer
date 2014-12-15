@@ -47,24 +47,6 @@ getRSS("/rss",function(urls){
 });
 
 
-/*
-  Power controls
-*/
-var powerEl = document.querySelector('#device-power');
-
-powerEl.addEventListener('change', function(event) {
-  var action = event.target.selectedOptions[0].id;
-  switch(action) {
-    case 'shutdown':
-      device.shutdown();
-      break;
-    case 'restart':
-      device.restart();
-      break;
-    default:
-      console.log('Unknown power action', action);
-  }
-});
 
 /*
   Playback controls
