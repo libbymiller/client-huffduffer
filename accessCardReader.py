@@ -74,10 +74,20 @@ while True:
   except nxppy.SelectError:
     # we always get an exception if the card reader isn't reading anything
     # so we just pass it through
-    uid = ""
-    url = ""
-    currentId = None
-    pass 
+    # stop playing when card is removed
+    try:
+      # only send stop if it's the first no-card error we get
+      if(currentId!=None):
+        print "posting - stop "+url
+        r = requests.post("http://localhost:5000/stopFromNFC", data="")
+        print r
+    except requests.ConnectionError:
+      print "no connection for stop"
+    finally:
+      uid = ""
+      url = ""
+      currentId = None
+      pass 
   except:
     print "Unexpected error:", sys.exc_info()
     break
