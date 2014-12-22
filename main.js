@@ -7,9 +7,11 @@ var express  = require('express'),
     radiodanClient = require('radiodan-client'),
     radiodan = radiodanClient.create(),
     player   = radiodan.player.get('main'),
+    eventBus       = require('./lib/event-bus').create(),
     fs = require('fs'),
     path = require('path'),
     exec = require('child_process').exec,
+    eventSource = require('express-eventsource'),
     port     = process.env.PORT || 5000;
 
 
@@ -21,8 +23,15 @@ app.use(bodyParser.urlencoded({ extended: true }));
 
 app.use('/radiodan', radiodanClient.middleware({crossOrigin: true}));
 
-var config = readConfig('config/config.json');
+//stuff
+bindToEventBus(player,eventBus);
 
+var playlist = readConfig('config/playlist.json');
+var config = readConfig('config/config.json');
+var currentFeedUrl = null;
+
+console.log("playlist is");
+console.log(playlist);
 console.log("config is");
 console.log(config);
 
@@ -32,7 +41,8 @@ console.log(config);
 // and allows you to set it using a POST
 
 app.get('/rss', function (req, res) {
-  res.render('config', { feedUrl: config.feedUrl });
+  res.render('config', {});
+// { feedUrl: config.feedUrl });
 });
 
 app.post('/rss', function (req, res) {
@@ -43,9 +53,9 @@ app.post('/rss', function (req, res) {
   res.redirect('/');
 });
 
-// rssFromNFC allos a post to set the RSS feed url
-
+// rssFromNFC allows a post (e.g from NFC) to set the RSS feed url
 app.post('/rssFromNFC', function (req, res) {
+  stopPlaying();
   if (req.body && req.body.feedUrl) {
 
      var powerLED      = radiodan.RGBLED.get('power');
@@ -56,20 +66,31 @@ app.post('/rssFromNFC', function (req, res) {
      addFeedURL(req.body.feedUrl);
   }
 
+
+  res.redirect('/');
+});
+
+
+// stop playing (e.g. from NFC trigger)
+
+app.post('/stopFromNFC', function (req, res) {
+  var st = player;
+  console.log("status %j", st);
+  stopPlaying();
   res.redirect('/');
 });
 
 
 // "write" a card
 // actually just adds a card id and url to a list
-// screen 1: 
+// screen 1: ask people to put the card in the box
 
 app.get('/write', function (req, res) {
   res.render('write');
 });
 
 
-// screen 2
+// screen 2: test the card for suitability and feed back information about it
 
 app.get('/write2', function (req, res) {
 
@@ -101,7 +122,7 @@ app.get('/write2', function (req, res) {
 
 });
 
-// screen 3
+// screen 3: check teh feed has enclosures
 
 app.post('/write3', function (req, res) {
     request(req.body.feedUrl,function(err, data){
@@ -130,8 +151,9 @@ app.post('/write3', function (req, res) {
 });
 
 
+//write4: write the ID to the database and display results
+
 app.post('/write4', function (req, res) {
-//write the ID to the database
 
   var feedUrl = req.body.feedUrl;
 
@@ -180,6 +202,7 @@ app.post('/write4', function (req, res) {
 
 
 app.listen(port);
+listenToEvents();
 
 showPowerLed();
 
@@ -203,22 +226,42 @@ console.log('Listening on port '+port);
 
 
 function showPowerLed(){
-     var powerLED      = radiodan.RGBLED.get('power');
-     powerLED.emit({
-      emit: true,
-      colour: [0,0,200],
-     });
+   var powerLED      = radiodan.RGBLED.get('power');
+   powerLED.emit({
+     emit: true,
+     colour: [0,0,200],
+   });
 }
 
+
 function addFeedURL(feedUrl){
+  var exists = config[feedUrl];
+  currentFeedUrl = feedUrl;
+  if(exists){
+    console.log("found feed");
+    var toPlay = exists["lastPlayed"];
+    var toSeekTo = exists["toSeekTo"];
+
+    player.add({
+      playlist: [toPlay],
+      clear: true
+    }).then(player.play()).then(player.seek({"time":toSeekTo})).then(getAndFilterRSS(feedUrl,toPlay));
+
+  }else{
+    console.log("feed doesn't exist - starting afresh");
+    config[feedUrl] = {};
+    writeConfig('config/config.json', config);
+    request(feedUrl,getRSSAndAddToPlaylist);
+  }
+
+/*
   config.feedUrl = feedUrl;
-  writeConfig('config/config.json', config);
   config = readConfig('config/config.json',null);
   console.log("new config");
   console.log(config);
-  request(config.feedUrl,getRSSAndAddToPlaylist);
-
+*/
 }
+
 
 function extractUrlFromEnclosure(index, item) {
   return cheerio(item).attr('url');
@@ -232,6 +275,38 @@ function startPlaying(){
 function stopPlaying() {
   console.log("powerButton RELEASED");
   player.pause({ value: true });
+}
+
+
+function getAndFilterRSS(feedUrl,toPlay){
+  // remove the one we are already listening to
+  // not sure about the ordering here
+  request(feedUrl,function(err, data){
+   
+    var powerLED      = radiodan.RGBLED.get('power');
+
+    var doc = cheerio(data.body);
+    var urls = doc.find('enclosure')
+                .map(extractUrlFromEnclosure)
+                .get();
+    var new_urls = [];
+    console.log(urls);
+    for(var x in urls){
+       if(toPlay!=urls[x]){
+         new_urls.push(urls[x]);
+       }
+    } 
+    player.add({
+      playlist: new_urls,
+      clear: false
+    }).then(
+       powerLED.emit({
+        emit: true,
+        colour: [0,0,100],
+       })
+  );
+
+  });  
 }
 
 
@@ -272,9 +347,15 @@ function readConfig(file) {
   var fullFile = path.join(fullPath,file);
   console.log(fs.existsSync(fullFile));
   if ( fs.existsSync(fullFile) ) {
-    return require(fullFile);
+    try{
+      return require(fullFile);
+    }catch(e){
+      console.log("problem "+e);
+      return {};
+    }
   }else{
     console.log("No config file");
+    return {};
   }
 }
 
@@ -291,3 +372,71 @@ function writeConfig(file, config) {
 }
 
 
+function listenToEvents(){
+  var eventStream = eventSource();
+
+  var eventBus = new EventEmitter({ wildcard: true });
+
+  ['*'].forEach(function (topic) {
+    eventBus.on(topic, function (args) {
+      console.log("!!t!!! "+topic);
+      console.log("!!a!!! "+args);
+    });
+  });
+
+}
+
+
+function bindToEventBus(player, eventBus){
+
+      player.on('player', function(playerData) {
+        var msg = {
+          playerId: player.id,
+          player: playerData
+        };
+
+        eventBus.emit('player', msg);
+      });
+
+      player.on('playlist', function(playlistData) {
+        var msg = {
+          playerId: player.id,
+          playlist: playlistData
+        };
+
+        eventBus.emit('playlist', msg);
+      });
+
+      var pl = null;
+
+      ['*'].forEach(function (topic) {
+        eventBus.on(topic, function (args) {
+           if(args["playlist"] && args["playlist"].length>0){
+             pl = args["playlist"][0];
+             if(pl && pl.length > 0){
+                writeConfig('config/playlist.json', playlist);               
+             }
+           }
+           if(args["player"]){
+             var ply = args["player"];
+             console.log(ply);
+             var sid = ply["songid"];
+             var elapsed = ply["elapsed"];
+             var file = pl["file"];
+             console.log("player "+file+" elapsed "+elapsed);
+             if(file && elapsed){
+
+               config[currentFeedUrl]["lastPlayed"]=file;
+               config[currentFeedUrl]["toSeekTo"]=elapsed;
+               console.log("saving config");
+               writeConfig('config/config.json', config);               
+             }
+
+           }
+
+ //          console.log("!!!!!! topic  "+topic);
+   //       console.log("!!!!!!args %j ",args);
+        });
+      });
+
+}
