@@ -9,6 +9,7 @@ var express  = require('express'),
     player   = radiodan.player.get('main'),
     fs = require('fs'),
     path = require('path'),
+    exec = require('child_process').exec,
     port     = process.env.PORT || 5000;
 
 app.engine('mustache', mustacheExpress());
@@ -17,17 +18,17 @@ app.set('views', __dirname + '/static');
 
 app.use(bodyParser.urlencoded({ extended: true }));
 
-app.use('/radiodan',
-  radiodanClient.middleware({crossOrigin: true})
-);
+app.use('/radiodan', radiodanClient.middleware({crossOrigin: true}));
 
-var config = readOrCreateConfigWithDefaults(
-  './config.json',
-  { feedUrl: 'https://huffduffer.com/libbymiller/rss' }
-);
+var config = readConfig('config.json');
 
 console.log("config is");
 console.log(config);
+
+// server
+
+// get rss shows the current url, if any
+// and allows you to set it using a POST
 
 app.get('/rss', function (req, res) {
   res.render('config', { feedUrl: config.feedUrl });
@@ -40,6 +41,8 @@ app.post('/rss', function (req, res) {
 
   res.redirect('/');
 });
+
+// rssFromNFC allos a post to set the RSS feed url
 
 app.post('/rssFromNFC', function (req, res) {
   if (req.body && req.body.feedUrl) {
@@ -56,6 +59,125 @@ app.post('/rssFromNFC', function (req, res) {
 });
 
 
+// "write" a card
+// actually just adds a card id and url to a list
+// screen 1: 
+
+app.get('/write', function (req, res) {
+  res.render('write');
+});
+
+
+// screen 2
+
+app.get('/write2', function (req, res) {
+
+  var msg = "";
+  //load the file
+  var fullPath = __dirname;
+  var fullFile = path.join(fullPath,"uid.json");
+  if ( fs.existsSync(fullFile) ) {
+    var data = require(fullFile);
+    if(data){
+      var feedUrl = data["feedUrl"] | "";
+      var uid = data["uid"] | "";
+      if(uid == ""){
+        msg = "No card available to read";
+      }else if (feedUrl==""){
+        msg = "Card "+uid+" ready to associate with a feed"
+      }else if (feedUrl!=""){
+        msg = "Card "+uid+" already exists in the database - currently linked to "+feedUrl+" - proceeding will link it to another feed";
+      }else{
+        msg = "Something went wrong";
+      }
+    }else{
+       msg = "No data found in "+fullFile;
+    }
+  }else{
+    msg = "No uid.json file found at "+fullFile;
+  }
+  res.render('write2', { feedUrl: req.body.feedUrl, msg: msg });
+
+});
+
+// screen 3
+
+app.post('/write3', function (req, res) {
+    request(req.body.feedUrl,function(err, data){
+      var urlOk = "Contains audio links";
+      if (err) {
+        console.error('Error fetching feed');
+        console.error(err.stack);
+        urlOk = "problem with the feed url - check it doesn't have a typo - "+req.body.feedUrl;
+        res.render('write3err', { feedUrl: req.body.feedUrl, urlOk: urlOk });
+      }else{
+
+        var doc = cheerio(data.body);
+        var urls = doc.find('enclosure')
+                .map(extractUrlFromEnclosure)
+                .get();
+    
+        if(urls!=null && urls.length>0){
+           urlOk = "Found "+urls.length+" audio files in the RSS feed - all ok";
+           res.render('write3', { feedUrl: req.body.feedUrl, urlOk: urlOk });
+        }else{
+          urlOk = "No playable audio files found in the RSS feed, though it does exist";
+          res.render('write3err', { feedUrl: req.body.feedUrl, urlOk: urlOk });
+        }
+      }
+    });
+});
+
+
+app.post('/write4', function (req, res) {
+//write the ID to the database
+
+  var feedUrl = req.body.feedUrl;
+
+  // read the data file
+  var fullPath = __dirname;
+  var fullDataFile = path.join(fullPath,"data.json");
+  var fullUidFile = path.join(fullPath,"uid.json");
+  var uid_data = null;
+  var data = null;
+  var msg = "";
+
+  if ( fs.existsSync(fullUidFile) ) {
+    uid_data = require(fullUidFile);
+  }else{
+    console.log("no uid");
+    msg = "can't complete - no uid found";
+  }
+
+  if ( fs.existsSync(fullDataFile) ) {
+    data = require(fullDataFile);
+  }else{
+    msg = "no data file found - continuing";
+    data = {};
+  }
+  if(uid_data && data){
+   var uid = uid_data["uid"];
+   if(data[uid]){
+     msg = "Replaced "+data[uid]+" for "+uid+" with "+feedUrl;
+   }else{
+     msg = "New id "+uid+" contains "+feedUrl;
+   }
+   data[uid] = feedUrl;
+   var j = JSON.stringify(data, null, 4)
+   fs.writeFile(fullDataFile, j, function (err3) {
+        if (err3) throw err3;
+        console.log("saved");
+   });
+
+   addFeedURL(feedUrl);
+  }else{
+   console.log("all went wrong somewhere");
+  } 
+  res.render('write4', { feedUrl: feedUrl, cardId: uid, msg: msg });
+
+});
+
+
 app.listen(port);
 
      var powerLED      = radiodan.RGBLED.get('power');
@@ -66,8 +188,8 @@ app.listen(port);
 
 function addFeedURL(feedUrl){
   config.feedUrl = feedUrl;
-  writeConfig('./config.json', config);
-  config = readOrCreateConfigWithDefaults('./config.json',null);
+  writeConfig('config.json', config);
+  config = readConfig('config.json',null);
   console.log("new config");
   console.log(config);
   request(config.feedUrl,getRSSAndAddToPlaylist);
@@ -126,17 +248,16 @@ function gracefulExit() {
   player.clear().then(process.exit);
 }
 
-function readOrCreateConfigWithDefaults(file, defaults) {
+function readConfig(file) {
   console.log("path is "+file);
   console.log("fs exists "+fs.existsSync(file)+" process "+process.env.HOME);
   var fullPath = __dirname;
   var fullFile = path.join(fullPath,file);
   console.log(fs.existsSync(fullFile));
   if ( fs.existsSync(fullFile) ) {
-    return require(file);
-  } else {
-    writeConfig(fullFile, defaults);
-    return defaults;
+    return require(fullFile);
+  }else{
+    console.log("No config file");
   }
 }
 

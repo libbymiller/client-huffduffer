@@ -40,10 +40,10 @@ while True:
   try:
     # read the card uid
     uid = reader.select()
-    print "currentid is "
-    print currentId
-    print "uid is "
-    print uid
+    #print "currentid is "
+    #print currentId
+    #print "uid is "
+    #print uid
 
     # we don't want to read it if we've just seen it
     if(uid is not None and currentId!=uid):
@@ -80,6 +80,7 @@ while True:
     pass 
   except:
     print "Unexpected error:", sys.exc_info()
+    break
 
   finally:
     # write our uid to a file, whatever it is
