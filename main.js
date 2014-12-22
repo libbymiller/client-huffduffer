@@ -12,6 +12,7 @@ var express  = require('express'),
     exec = require('child_process').exec,
     port     = process.env.PORT || 5000;
 
+
 app.engine('mustache', mustacheExpress());
 app.set('view engine', 'mustache');
 app.set('views', __dirname + '/static');
@@ -20,7 +21,7 @@ app.use(bodyParser.urlencoded({ extended: true }));
 
 app.use('/radiodan', radiodanClient.middleware({crossOrigin: true}));
 
-var config = readConfig('config.json');
+var config = readConfig('config/config.json');
 
 console.log("config is");
 console.log(config);
@@ -75,7 +76,7 @@ app.get('/write2', function (req, res) {
   var msg = "";
   //load the file
   var fullPath = __dirname;
-  var fullFile = path.join(fullPath,"uid.json");
+  var fullFile = path.join(fullPath,"config/uid.json");
   if ( fs.existsSync(fullFile) ) {
     var data = require(fullFile);
     if(data){
@@ -136,8 +137,8 @@ app.post('/write4', function (req, res) {
 
   // read the data file
   var fullPath = __dirname;
-  var fullDataFile = path.join(fullPath,"data.json");
-  var fullUidFile = path.join(fullPath,"uid.json");
+  var fullDataFile = path.join(fullPath,"config/data.json");
+  var fullUidFile = path.join(fullPath,"config/uid.json");
   var uid_data = null;
   var data = null;
   var msg = "";
@@ -180,16 +181,39 @@ app.post('/write4', function (req, res) {
 
 app.listen(port);
 
+showPowerLed();
+
+var powerButton = radiodan.button.get("power");
+powerButton.on("press", stopPlaying);
+powerButton.on("release", startPlaying);
+
+//console.log('Reading feedUrl', config.feedUrl);
+//request(config.feedUrl,getRSSAndAddToPlaylist);
+
+process.on('SIGTERM', gracefulExit);
+process.on('SIGINT' , gracefulExit);
+
+app.use(express.static(__dirname + '/static'));
+
+console.log('Listening on port '+port);
+
+
+
+///various handy methods
+
+
+function showPowerLed(){
      var powerLED      = radiodan.RGBLED.get('power');
      powerLED.emit({
       emit: true,
       colour: [0,0,200],
      });
+}
 
 function addFeedURL(feedUrl){
   config.feedUrl = feedUrl;
-  writeConfig('config.json', config);
-  config = readConfig('config.json',null);
+  writeConfig('config/config.json', config);
+  config = readConfig('config/config.json',null);
   console.log("new config");
   console.log(config);
   request(config.feedUrl,getRSSAndAddToPlaylist);
@@ -209,13 +233,6 @@ function stopPlaying() {
   console.log("powerButton RELEASED");
   player.pause({ value: true });
 }
-
-var powerButton = radiodan.button.get("power");
-powerButton.on("press", stopPlaying);
-powerButton.on("release", startPlaying);
-
-console.log('Reading feedUrl', config.feedUrl);
-request(config.feedUrl,getRSSAndAddToPlaylist);
 
 
 function getRSSAndAddToPlaylist(err, data) {
@@ -273,9 +290,4 @@ function writeConfig(file, config) {
   }
 }
 
-process.on('SIGTERM', gracefulExit);
-process.on('SIGINT' , gracefulExit);
 
-app.use(express.static(__dirname + '/static'));
-
-console.log('Listening on port '+port);

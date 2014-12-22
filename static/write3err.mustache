@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title></title>
+</head>
+<body>
+  <h1>Write a card - Step 3</h1>
+  <p>Url ok: {{ urlOk }}</p>
+
+  <p>Click "Test" to try again</p>
+  <form action="/write3" method="POST">
+    <label>
+      RSS Feed URL
+      <input name="feedUrl" type="text" value="{{ feedUrl }}" />
+    </label>
+    <input type="submit" value="Teste" />
+  </form>
+</body>
+</html>

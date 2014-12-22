@@ -1,7 +1,7 @@
 '''
 This is the only interface with the NFC reader, as it can only be accessed by one process at a time
 It: 
- * reads data.json for exsting mappings between uids and feedUrls 
+ * reads config/data.json for exsting mappings between uids and feedUrls 
   - if it finds a match with the current uid
   - it sends a command to the server to tell it that the card for a feedUrl is present
  * it also saves its state continuously for other apps to read.
@@ -23,8 +23,8 @@ from pprint import pprint
 dn = os.path.dirname(os.path.realpath(__file__))
 
 # data file mapping uids and RSS feed urls. Read-only from this python script
-print "opening nfc config file "+dn+"/data.json"
-json_data=open(dn+"/data.json")
+print "opening nfc config file "+dn+"/config/data.json"
+json_data=open(dn+"/config/data.json")
 
 data = json.load(json_data)
 print data
@@ -87,7 +87,7 @@ while True:
     # so that other apps can use it, including if not present
 
     state = {"uid":uid, "feedUrl": url}
-    out_file = open(dn+"/uid.json","w")
+    out_file = open(dn+"/config/uid.json","w")
     json.dump(state,out_file, indent=4) 
     out_file.close()
 
