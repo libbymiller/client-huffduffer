@@ -245,7 +245,8 @@ function addFeedURL(feedUrl){
     player.add({
       playlist: [toPlay],
       clear: true
-    }).then(player.play()).then(player.seek({"time":toSeekTo})).then(getAndFilterRSS(feedUrl,toPlay));
+    }).then(player.play()).then(player.seek({"time":toSeekTo}));
+//////???? libby .then(getAndFilterRSS(feedUrl,toPlay));
 
   }else{
     console.log("feed doesn't exist - starting afresh");
@@ -363,9 +364,9 @@ function writeConfig(file, config) {
 
   var fullPath = __dirname;
   var fullFile = path.join(fullPath,file);
-  console.log("writing config path "+file+" config "+JSON.stringify(config));
+  console.log("writing config path "+fullFile+" config "+JSON.stringify(config));
   try{
-    fs.writeFileSync(file, JSON.stringify(config));
+    fs.writeFileSync(fullFile, JSON.stringify(config));
   }catch(e){
     console.log("problem writing to file "+e);
   }
@@ -379,8 +380,8 @@ function listenToEvents(){
 
   ['*'].forEach(function (topic) {
     eventBus.on(topic, function (args) {
-      console.log("!!t!!! "+topic);
-      console.log("!!a!!! "+args);
+      console.log("topic "+topic);
+      console.log("args "+args);
     });
   });
 
