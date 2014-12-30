@@ -58,11 +58,7 @@ app.post('/rssFromNFC', function (req, res) {
   stopPlaying();
   if (req.body && req.body.feedUrl) {
 
-     var powerLED      = radiodan.RGBLED.get('power');
-     powerLED.emit({
-      emit: true,
-      colour: [100,100,0],
-     });
+     showPowerLed([100,100,0]);
      addFeedURL(req.body.feedUrl);
   }
 
@@ -77,6 +73,7 @@ app.post('/stopFromNFC', function (req, res) {
   var st = player;
   console.log("status %j", st);
   stopPlaying();
+  showPowerLed([0,0,100]);
   res.redirect('/');
 });
 
@@ -122,7 +119,7 @@ app.get('/write2', function (req, res) {
 
 });
 
-// screen 3: check teh feed has enclosures
+// screen 3: check the feed has enclosures
 
 app.post('/write3', function (req, res) {
     request(req.body.feedUrl,function(err, data){
@@ -204,7 +201,7 @@ app.post('/write4', function (req, res) {
 app.listen(port);
 listenToEvents();
 
-showPowerLed();
+showPowerLed([0,0,200]);
 
 var powerButton = radiodan.button.get("power");
 powerButton.on("press", stopPlaying);
@@ -221,15 +218,14 @@ app.use(express.static(__dirname + '/static'));
 console.log('Listening on port '+port);
 
 
-
 ///various handy methods
 
 
-function showPowerLed(){
+function showPowerLed(arr){
    var powerLED      = radiodan.RGBLED.get('power');
    powerLED.emit({
      emit: true,
-     colour: [0,0,200],
+     colour: arr,
    });
 }
 
@@ -238,9 +234,9 @@ function addFeedURL(feedUrl){
   var exists = config[feedUrl];
   currentFeedUrl = feedUrl;
   if(exists){
-    console.log("found feed");
     var toPlay = exists["lastPlayed"];
     var toSeekTo = exists["toSeekTo"];
+    console.log("found feed "+toPlay+" "+toSeekTo);
 
     player.add({
       playlist: [toPlay],
@@ -269,12 +265,12 @@ function extractUrlFromEnclosure(index, item) {
 }
 
 function startPlaying(){
-  console.log("powerButton PRESSED");
+  console.log("starting playing");
   player.play();
 }
 
 function stopPlaying() {
-  console.log("powerButton RELEASED");
+  console.log("stopping playing");
   player.pause({ value: true });
 }
 
@@ -284,8 +280,6 @@ function getAndFilterRSS(feedUrl,toPlay){
   // not sure about the ordering here
   request(feedUrl,function(err, data){
    
-    var powerLED      = radiodan.RGBLED.get('power');
-
     var doc = cheerio(data.body);
     var urls = doc.find('enclosure')
                 .map(extractUrlFromEnclosure)
@@ -300,12 +294,8 @@ function getAndFilterRSS(feedUrl,toPlay){
     player.add({
       playlist: new_urls,
       clear: false
-    }).then(
-       powerLED.emit({
-        emit: true,
-        colour: [0,0,100],
-       })
-  );
+    });
+//.then(showPowerLed([0,0,100]));
 
   });  
 }
@@ -318,7 +308,6 @@ function getRSSAndAddToPlaylist(err, data) {
     return;
   }
 
-  var powerLED      = radiodan.RGBLED.get('power');
 
   var doc = cheerio(data.body);
   var urls = doc.find('enclosure')
@@ -327,12 +316,9 @@ function getRSSAndAddToPlaylist(err, data) {
   player.add({
     playlist: urls,
     clear: true
-  }).then(startPlaying()).then(
-     powerLED.emit({
-      emit: true,
-      colour: [0,0,100],
-     })
-  );
+  });
+//.then(startPlaying()).then(showPowerLed([0,0,100]));
+  
 }
 
 
