@@ -1,6 +1,5 @@
 var express  = require('express'),
     request = require('request'),
-    cheerio = require('cheerio'),
     mustacheExpress = require('mustache-express'),
     bodyParser = require('body-parser'),
     app      = express(),
@@ -10,10 +9,10 @@ var express  = require('express'),
     eventBus       = require('./lib/event-bus').create(),
     fs = require('fs'),
     path = require('path'),
-    exec = require('child_process').exec,
     eventSource = require('express-eventsource'),
     port     = process.env.PORT || 5000;
 
+// server things
 
 app.engine('mustache', mustacheExpress());
 app.set('view engine', 'mustache');
@@ -21,39 +20,38 @@ app.set('views', __dirname + '/static');
 
 app.use(bodyParser.urlencoded({ extended: true }));
 
-app.use('/radiodan', radiodanClient.middleware({crossOrigin: true}));
+// initialise radiodan and listen for and emit events
 
-//stuff
+app.use('/radiodan', radiodanClient.middleware({crossOrigin: true}));
 bindToEventBus(player,eventBus);
 
-var playlist = readConfig('config/playlist.json');
+// config things
+
 var config = readConfig('config/config.json');
 var currentFeedUrl = null;
 
-console.log("playlist is");
-console.log(playlist);
 console.log("config is");
 console.log(config);
 
 // server
 
-// get rss shows the current url, if any
-// and allows you to set it using a POST
+// get rss allows you to set the rss file via the web 
 
 app.get('/rss', function (req, res) {
   res.render('config', {});
-// { feedUrl: config.feedUrl });
 });
+
+// post rss sets the url, via the web only
 
 app.post('/rss', function (req, res) {
   if (req.body && req.body.feedUrl) {
      addFeedURL(req.body.feedUrl, req,res);
   }
-
   res.redirect('/');
 });
 
 // rssFromNFC allows a post (e.g from NFC) to set the RSS feed url
+
 app.post('/rssFromNFC', function (req, res) {
   stopPlaying();
   if (req.body && req.body.feedUrl) {
@@ -61,7 +59,6 @@ app.post('/rssFromNFC', function (req, res) {
      showPowerLed([100,100,0]);
      addFeedURL(req.body.feedUrl);
   }
-
 
   res.redirect('/');
 });
@@ -131,11 +128,8 @@ app.post('/write3', function (req, res) {
         res.render('write3err', { feedUrl: req.body.feedUrl, urlOk: urlOk });
       }else{
 
-        var doc = cheerio(data.body);
-        var urls = doc.find('enclosure')
-                .map(extractUrlFromEnclosure)
-                .get();
-    
+        var urls = getMatches(data.body);
+
         if(urls!=null && urls.length>0){
            urlOk = "Found "+urls.length+" audio files in the RSS feed - all ok";
            res.render('write3', { feedUrl: req.body.feedUrl, urlOk: urlOk });
@@ -148,7 +142,7 @@ app.post('/write3', function (req, res) {
 });
 
 
-//write4: write the ID to the database and display results
+// screen 4: write the ID to the database and display results
 
 app.post('/write4', function (req, res) {
 
@@ -198,17 +192,17 @@ app.post('/write4', function (req, res) {
 });
 
 
+// more server stuff
+
 app.listen(port);
-listenToEvents();
 
 showPowerLed([0,0,200]);
+
+// for reacting to button off / on
 
 var powerButton = radiodan.button.get("power");
 powerButton.on("press", stopPlaying);
 powerButton.on("release", startPlaying);
-
-//console.log('Reading feedUrl', config.feedUrl);
-//request(config.feedUrl,getRSSAndAddToPlaylist);
 
 process.on('SIGTERM', gracefulExit);
 process.on('SIGINT' , gracefulExit);
@@ -217,9 +211,15 @@ app.use(express.static(__dirname + '/static'));
 
 console.log('Listening on port '+port);
 
+///-----------------///
+
+
+
+
 
 ///various handy methods
 
+// turn the LED on with RGB arr
 
 function showPowerLed(arr){
    var powerLED      = radiodan.RGBLED.get('power');
@@ -230,39 +230,7 @@ function showPowerLed(arr){
 }
 
 
-function addFeedURL(feedUrl){
-  var exists = config[feedUrl];
-  currentFeedUrl = feedUrl;
-  if(exists){
-    var toPlay = exists["lastPlayed"];
-    var toSeekTo = exists["toSeekTo"];
-    console.log("found feed "+toPlay+" "+toSeekTo);
-
-    player.add({
-      playlist: [toPlay],
-      clear: true
-    }).then(player.play()).then(player.seek({"time":toSeekTo}));
-//////???? libby .then(getAndFilterRSS(feedUrl,toPlay));
-
-  }else{
-    console.log("feed doesn't exist - starting afresh");
-    config[feedUrl] = {};
-    writeConfig('config/config.json', config);
-    request(feedUrl,getRSSAndAddToPlaylist);
-  }
-
-/*
-  config.feedUrl = feedUrl;
-  config = readConfig('config/config.json',null);
-  console.log("new config");
-  console.log(config);
-*/
-}
-
-
-function extractUrlFromEnclosure(index, item) {
-  return cheerio(item).attr('url');
-}
+// start and stop playing
 
 function startPlaying(){
   console.log("starting playing");
@@ -275,104 +243,140 @@ function stopPlaying() {
 }
 
 
-function getAndFilterRSS(feedUrl,toPlay){
-  // remove the one we are already listening to
-  // not sure about the ordering here
-  request(feedUrl,function(err, data){
-   
-    var doc = cheerio(data.body);
-    var urls = doc.find('enclosure')
-                .map(extractUrlFromEnclosure)
-                .get();
-    var new_urls = [];
-    console.log(urls);
-    for(var x in urls){
-       if(toPlay!=urls[x]){
-         new_urls.push(urls[x]);
-       }
-    } 
-    player.add({
-      playlist: new_urls,
-      clear: false
-    });
-//.then(showPowerLed([0,0,100]));
+// main add feed url method
 
-  });  
+function addFeedURL(feedUrl){
+  var bookmarked = config[feedUrl];
+  currentFeedUrl = feedUrl;
+  cacheRSSAndPlay(feedUrl,bookmarked);
+
+}
+
+// make a simple version of the RSS filename to use as a cache
+
+function makeRSSName(feedUrl){
+
+    var fn = feedUrl.replace(/^https?/,"");
+    fn = fn.replace(/\W/g,"");
+    return fn;
 }
 
 
-function getRSSAndAddToPlaylist(err, data) {
-  if (err) {
-    console.error('Error fetching feed');
-    console.error(err.stack);
-    return;
-  }
+// complicated method, which
+// * gets a feed url
+// * compares it with any cached data from that feed url
+// * plays what it finds using the following rules (thanks Richard):
+// If there is a whole new one
+//       play it
+// else
+//        play from where I stopped in whatever
+// when that finishes play the next newer one (irrespective of listenedness)
+// or if there is no newer one play the next older one.
 
 
-  var doc = cheerio(data.body);
-  var urls = doc.find('enclosure')
-                .map(extractUrlFromEnclosure)
-                .get();
-  player.add({
-    playlist: urls,
-    clear: true
-  });
-//.then(startPlaying()).then(showPowerLed([0,0,100]));
+function cacheRSSAndPlay(feedUrl, bookmarked){
+
+  //make a simplified name from the feedUrl
   
-}
+  var fn = makeRSSName(feedUrl);
+  console.log("caching feedurl "+feedUrl+" as "+fn);
 
 
-function gracefulExit() {
-  console.log('Exiting...');
-  player.clear().then(process.exit);
-}
-
-function readConfig(file) {
-  console.log("path is "+file);
-  console.log("fs exists "+fs.existsSync(file)+" process "+process.env.HOME);
-  var fullPath = __dirname;
-  var fullFile = path.join(fullPath,file);
-  console.log(fs.existsSync(fullFile));
-  if ( fs.existsSync(fullFile) ) {
-    try{
-      return require(fullFile);
-    }catch(e){
-      console.log("problem "+e);
-      return {};
+  // get the feed data
+  request(feedUrl,function(err, data){
+    if (err){
+       console.log("error in request for "+feedurl+" err "+err);
     }
-  }else{
-    console.log("No config file");
-    return {};
-  }
-}
+    var fullPath = __dirname + "/cache";
+    var fullFile = path.join(fullPath,fn);
 
-function writeConfig(file, config) {
+    // check the cache
+    console.log("Looking for cache "+fullFile);
+    var exists = fs.existsSync(fullFile);
+    console.log(exists +" exists");
+    var new_urls = getMatches(data.body);
+    var new_urls_str = new_urls.join("\n");
 
-  var fullPath = __dirname;
-  var fullFile = path.join(fullPath,file);
-  console.log("writing config path "+fullFile+" config "+JSON.stringify(config));
-  try{
-    fs.writeFileSync(fullFile, JSON.stringify(config));
-  }catch(e){
-    console.log("problem writing to file "+e);
-  }
-}
+    if(exists){
+     // compare old and new data
 
+     fs.readFile(fullFile,'utf8', function (old_err, old_data) {
+        console.log("hello "+fullFile);
+        if (old_err) throw old_err;
+        console.log(old_data);
+        if(new_urls_str==old_data){
+          console.log("data not changed");
+          if(bookmarked){
+            var bookmark = bookmarked["lastPlayed"];
+            var toSeekTo = bookmarked["toSeekTo"] | 0;
+            var bookmark_index = new_urls.indexOf(bookmark);
+            if(bookmark_index==-1){
+               //doesn't contain our cached one, so we put that on the front of the new list. THis shouldn't happen!
+               var toPlay = new_urls.unshift(bookmark);
+               playWithSeek(toPlay, toSeekTo);
+            }else{
+               //this is more likely - we are either at the start or somewhat through the  list, so we return it and everything after it   
+               var toPlay = new_urls.slice(bookmark_index, new_urls.length);
+               playWithSeek(toPlay, toSeekTo);
+            }
+          }else{
+            //just return the new list, no starting point or seek exists
+            playWithSeek(new_urls, 0);
+          }
 
-function listenToEvents(){
-  var eventStream = eventSource();
-
-  var eventBus = new EventEmitter({ wildcard: true });
-
-  ['*'].forEach(function (topic) {
-    eventBus.on(topic, function (args) {
-      console.log("topic "+topic);
-      console.log("args "+args);
-    });
+        }else{
+          console.log("data changed, writing file "+fullFile);
+          console.log(new_urls);
+          writeFile(fullFile, new_urls_str);
+          playWithSeek(new_urls, 0);
+        }
+      });      
+    }else{
+          console.log("no cache, data changed, writing file "+fullFile);
+          writeFile(fullFile, new_urls_str);
+          playWithSeek(new_urls, 0);
+    }
   });
 
 }
 
+
+// Play a playlist (list of mp3s) and seek if we have a seek for the first one
+
+function playWithSeek(playlist, seek){
+  if(seek ==null || seek ==0){
+          player.add({
+                  playlist: playlist,
+                  clear: true
+          }).then(player.play());
+
+  }else{
+          player.add({
+                  playlist: playlist,
+                  clear: true
+          }).then(player.play()).then(player.seek({"time":seek}));
+
+  }
+
+}
+
+// hack-parse a feed for enclosures
+// hack parsed because XML parsing is slow (sorry Andrew!)
+
+function getMatches(str){
+   console.log("getting matches");
+   var results = [];
+   var arrMatches = str.match(/<enclosure url=\"(.*?)\"/g);
+   console.log(arrMatches);
+   for(var a in arrMatches){
+      var url_arr = arrMatches[a].match(/<enclosure url=\"(.*?)\"/);
+      results.push(url_arr[1]);
+   }
+   return results;
+}
+
+
+// handle events, saving config where appropriate
 
 function bindToEventBus(player, eventBus){
 
@@ -400,19 +404,31 @@ function bindToEventBus(player, eventBus){
         eventBus.on(topic, function (args) {
            if(args["playlist"] && args["playlist"].length>0){
              pl = args["playlist"][0];
+             console.log("pl");
+             console.log(pl);
              if(pl && pl.length > 0){
                 writeConfig('config/playlist.json', playlist);               
              }
            }
            if(args["player"]){
              var ply = args["player"];
+             console.log("ply");
              console.log(ply);
+             var error = ply["error"];
+             if(error){
+                console.log("error in playback, skipping "+error);
+                // not sure about this means of handling errors
+                player.remove({"position":0});
+                player.play();
+             }
              var sid = ply["songid"];
              var elapsed = ply["elapsed"];
              var file = pl["file"];
              console.log("player "+file+" elapsed "+elapsed);
              if(file && elapsed){
-
+               if(!config[currentFeedUrl]){
+                  config[currentFeedUrl] = {};
+               }
                config[currentFeedUrl]["lastPlayed"]=file;
                config[currentFeedUrl]["toSeekTo"]=elapsed;
                console.log("saving config");
@@ -421,9 +437,58 @@ function bindToEventBus(player, eventBus){
 
            }
 
- //          console.log("!!!!!! topic  "+topic);
-   //       console.log("!!!!!!args %j ",args);
         });
       });
 
 }
+
+
+// read a json file
+
+function readConfig(file) {
+  console.log("path is "+file);
+  console.log("fs exists "+fs.existsSync(file)+" process "+process.env.HOME);
+  var fullPath = __dirname;
+  var fullFile = path.join(fullPath,file);
+  console.log(fs.existsSync(fullFile));
+  if ( fs.existsSync(fullFile) ) {
+    try{
+      return require(fullFile);
+    }catch(e){
+      console.log("problem "+e);
+      return {};
+    }
+  }else{
+    console.log("No config file");
+    return {};
+  }
+}
+
+// write a json file
+
+function writeConfig(file, config) {
+
+  var fullPath = __dirname;
+  var fullFile = path.join(fullPath,file);
+  console.log("writing config path "+fullFile+" config "+JSON.stringify(config));
+  writeFile(fullFile, JSON.stringify(config));
+}
+
+// write a string to file
+
+function writeFile(fullFile, str){
+    try{
+      fs.writeFileSync(fullFile, str);
+    }catch(e){
+      console.log("problem saving file "+fullFile+" error: "+e);
+    }
+
+}
+
+// exit
+
+function gracefulExit() {
+  console.log('Exiting...');
+  player.clear().then(process.exit);
+}
+
