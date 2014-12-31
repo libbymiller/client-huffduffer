@@ -22,13 +22,6 @@ from pprint import pprint
 # this script's directory
 dn = os.path.dirname(os.path.realpath(__file__))
 
-# data file mapping uids and RSS feed urls. Read-only from this python script
-print "opening nfc config file "+dn+"/config/data.json"
-json_data=open(dn+"/config/data.json")
-
-data = json.load(json_data)
-print data
-json_data.close()
 
 reader = nxppy.Mifare()
 print "Loaded mifare device"
@@ -51,6 +44,15 @@ while True:
       url = None
       payload = None
       print "New card ID:" +currentId
+
+      # data file mapping uids and RSS feed urls. Read-only from this python script
+      print "opening nfc config file "+dn+"/config/data.json"
+      json_data=open(dn+"/config/data.json")
+
+      data = json.load(json_data)
+      print data
+      json_data.close()
+
       for d in data:
          id = d
          url = data[d]
