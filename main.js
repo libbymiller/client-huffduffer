@@ -10,7 +10,16 @@ var express  = require('express'),
     fs = require('fs'),
     path = require('path'),
     eventSource = require('express-eventsource'),
-    port     = process.env.PORT || 5000;
+    port     = process.env.PORT || 5000,
+
+    colours = {
+      black  : [0, 0, 0],
+      blue   : [0, 0, 255],
+      green  : [0, 255, 0],
+      red    : [255, 0, 0],
+      white  : [255, 255, 255],
+      yellow : [255, 255, 0]
+    };
 
 // server things
 
@@ -24,6 +33,7 @@ app.use(bodyParser.urlencoded({ extended: true }));
 
 app.use('/radiodan', radiodanClient.middleware({crossOrigin: true}));
 bindToEventBus(player,eventBus);
+
 
 // config things
 
@@ -54,9 +64,8 @@ app.post('/rss', function (req, res) {
 
 app.post('/rssFromNFC', function (req, res) {
   stopPlaying();
+  showPowerLed(colours.white);
   if (req.body && req.body.feedUrl) {
-
-     showPowerLed([100,100,0]);
      addFeedURL(req.body.feedUrl);
   }
 
@@ -70,7 +79,6 @@ app.post('/stopFromNFC', function (req, res) {
   var st = player;
   console.log("status %j", st);
   stopPlaying();
-  showPowerLed([0,0,100]);
   res.redirect('/');
 });
 
@@ -196,7 +204,6 @@ app.post('/write4', function (req, res) {
 
 app.listen(port);
 
-showPowerLed([0,0,200]);
 
 // for reacting to button off / on
 
@@ -210,6 +217,9 @@ process.on('SIGINT' , gracefulExit);
 app.use(express.static(__dirname + '/static'));
 
 console.log('Listening on port '+port);
+
+showPowerLed(colours.blue)
+
 
 ///-----------------///
 
@@ -234,11 +244,12 @@ function showPowerLed(arr){
 
 function startPlaying(){
   console.log("starting playing");
-  player.play();
+  player.play().then(showPowerLed(colours.green));
 }
 
 function stopPlaying() {
   console.log("stopping playing");
+  showPowerLed(colours.blue);
   player.pause({ value: true });
 }
 
@@ -348,13 +359,13 @@ function playWithSeek(playlist, seek){
           player.add({
                   playlist: playlist,
                   clear: true
-          }).then(player.play());
+          }).then(player.play()).then(showPowerLed(colours.green));
 
   }else{
           player.add({
                   playlist: playlist,
                   clear: true
-          }).then(player.play()).then(player.seek({"time":seek}));
+          }).then(player.play()).then(player.seek({"time":seek})).then(showPowerLed(colours.green));
 
   }
 
@@ -489,6 +500,7 @@ function writeFile(fullFile, str){
 
 function gracefulExit() {
   console.log('Exiting...');
+  showPowerLed(colours.black);
   player.clear().then(process.exit);
 }
 
