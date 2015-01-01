@@ -36,12 +36,7 @@ bindToEventBus(player,eventBus);
 
 
 // config things
-
-var config = readConfig('config/config.json');
 var currentFeedUrl = null;
-
-console.log("config is");
-console.log(config);
 
 // server
 
@@ -101,26 +96,37 @@ app.get('/write2', function (req, res) {
   var fullPath = __dirname;
   var fullFile = path.join(fullPath,"config/uid.json");
   if ( fs.existsSync(fullFile) ) {
-    var data = require(fullFile);
-    if(data){
-      var feedUrl = data["feedUrl"] | "";
-      var uid = data["uid"] | "";
-      if(uid == ""){
-        msg = "No card available to read";
-      }else if (feedUrl==""){
-        msg = "Card "+uid+" ready to associate with a feed"
-      }else if (feedUrl!=""){
-        msg = "Card "+uid+" already exists in the database - currently linked to "+feedUrl+" - proceeding will link it to another feed";
-      }else{
-        msg = "Something went wrong";
-      }
-    }else{
-       msg = "No data found in "+fullFile;
-    }
+
+     fs.readFile(fullFile,'utf8', function (err, data) {
+        if (err){
+          msg = "Error getting uid file, probably no card available";
+        }
+        if(data){
+          console.log("data");
+          console.log(data);
+          var d = JSON.parse(data);
+
+          var feedUrl = d["feedUrl"];
+          var uid = d["uid"];
+          if(uid == ""){
+            msg = "No card available to read";
+          }else if (feedUrl==""){
+            msg = "Card "+uid+" ready to associate with a feed"
+          }else if (feedUrl!=""){
+            msg = "Card "+uid+" already exists in the database - currently linked to "+feedUrl+" - proceeding will link it to another feed";
+          }else{
+            msg = "Something went wrong";
+          }
+        }else{
+          msg = "No data found in "+fullFile;
+        }
+
+        res.render('write2', { feedUrl: req.body.feedUrl, msg: msg });
+     });
   }else{
     msg = "No uid.json file found at "+fullFile;
+    res.render('write2', { feedUrl: req.body.feedUrl, msg: msg });
   }
-  res.render('write2', { feedUrl: req.body.feedUrl, msg: msg });
 
 });
 
@@ -154,48 +160,69 @@ app.post('/write3', function (req, res) {
 
 app.post('/write4', function (req, res) {
 
-  var feedUrl = req.body.feedUrl;
+  var newFeedUrl = req.body.feedUrl;
 
   // read the data file
   var fullPath = __dirname;
   var fullDataFile = path.join(fullPath,"config/data.json");
   var fullUidFile = path.join(fullPath,"config/uid.json");
-  var uid_data = null;
-  var data = null;
   var msg = "";
 
   if ( fs.existsSync(fullUidFile) ) {
-    uid_data = require(fullUidFile);
+     fs.readFile(fullUidFile,'utf8', function (err, uiddata) {
+        if (err){ 
+          msg = "Error getting uid file, probably no card available";
+        } 
+        if(uiddata){
+          console.log("uiddata");
+          console.log(uiddata);
+          var d = JSON.parse(uiddata);
+
+          var feedUrl = d["feedUrl"];
+          var uid = d["uid"];
+
+          var dd = {};
+//          if ( fs.existsSync(fullDataFile) ) {
+            fs.readFile(fullDataFile,'utf8', function (err, data) {
+               if (err){ 
+                 msg = "Error getting data file, continuing";
+               } 
+               if(data){
+                 console.log("data");
+                 console.log(data);
+                 dd = JSON.parse(data);
+               }
+
+               if(dd[uid]){
+                 msg = "Replaced "+dd[uid]+" for "+uid+" with "+newFeedUrl;
+               }else{
+                 msg = "New id "+uid+" contains "+newFeedUrl;
+               }
+               dd[uid] = newFeedUrl;
+               var j = JSON.stringify(dd, null, 4)
+               fs.writeFile(fullDataFile, j, function (err3) {
+                 if (err3){
+                   msg = "saving failed";
+                 }
+                  console.log("saved");
+               });
+               stopPlaying();
+               addFeedURL(newFeedUrl);
+               res.render('write4', { feedUrl: newFeedUrl, cardId: uid, msg: msg });
+
+             });
+       }else{
+         msg = "No uid file - probably no card vaailable";
+         res.render('write4', { feedUrl: newFeedUrl, cardId: "", msg: msg });
+       }
+     });
+
   }else{
     console.log("no uid");
     msg = "can't complete - no uid found";
+    res.render('write4', { feedUrl: feedUrl, cardId: "", msg: msg });
   }
 
-  if ( fs.existsSync(fullDataFile) ) {
-    data = require(fullDataFile);
-  }else{
-    msg = "no data file found - continuing";
-    data = {};
-  }
-  if(uid_data && data){
-   var uid = uid_data["uid"];
-   if(data[uid]){
-     msg = "Replaced "+data[uid]+" for "+uid+" with "+feedUrl;
-   }else{
-     msg = "New id "+uid+" contains "+feedUrl;
-   }
-   data[uid] = feedUrl;
-   var j = JSON.stringify(data, null, 4)
-   fs.writeFile(fullDataFile, j, function (err3) {
-        if (err3) throw err3;
-        console.log("saved");
-   });
-
-   addFeedURL(feedUrl);
-  }else{
-   console.log("all went wrong somewhere");
-  } 
-  res.render('write4', { feedUrl: feedUrl, cardId: uid, msg: msg });
 
 });
 
@@ -239,13 +266,57 @@ function showPowerLed(arr){
    });
 }
 
+// check we have a card - don't want it to play otherwise, as it's confusing
+
+function checkNFCPresentAndPlay(){
+
+  var fullPath = __dirname;
+  var fullFile = path.join(fullPath,"config/uid.json");
+  if ( fs.existsSync(fullFile) ) {
+     fs.readFile(fullFile,'utf8', function (err, data) {
+        if (err) throw err;
+        if(data){
+          console.log("data");
+          console.log(data);
+          var d = JSON.parse(data);
+          var feedUrl = d["feedUrl"];
+          var uid = d["uid"];
+          console.log(feedUrl);
+          console.log(uid);
+          if(uid == ""){
+            console.log("UID is not there");
+          }
+          if(feedUrl == ""){
+            console.log("feedUrl is not there");
+          }
+          if(uid == "" || feedUrl ==""){
+            console.log("uid or feedurl is empty");
+            return false;
+          }else{
+            console.log("ok");
+            player.play().then(showPowerLed(colours.green));
+            return true;
+          }
+        }else{
+          console.log("no data file");
+          return false;
+        }
+     });
+  }else{
+    console.log("file doesn't exist "+fullFile);
+    return false;
+  }  
+}
 
 // start and stop playing
+// we don't want to play if there's no card
+// (sometimes there might be something on the playlist left over)
 
 function startPlaying(){
-  console.log("starting playing");
-  player.play().then(showPowerLed(colours.green));
+  console.log("starting playing, checking for NFC first ")
+  checkNFCPresentAndPlay();
 }
+
 
 function stopPlaying() {
   console.log("stopping playing");
@@ -257,9 +328,28 @@ function stopPlaying() {
 // main add feed url method
 
 function addFeedURL(feedUrl){
-  var bookmarked = config[feedUrl];
-  currentFeedUrl = feedUrl;
-  cacheRSSAndPlay(feedUrl,bookmarked);
+ // first load config
+
+ var fullPath = __dirname;
+ var fullFile = path.join(fullPath,"config/config.json");
+ fs.readFile(fullFile,'utf8', function (err, data) {
+        if (err) {
+          console.log("no config file, that's ok");
+        }
+        var config = {};
+        if(data){
+          console.log("data");
+          console.log(data);
+          config = JSON.parse(data);
+        }
+        if(config && config[feedUrl]){
+          bookmarked = config[feedUrl];
+        }else{
+          bookmarked = null;
+        }
+        currentFeedUrl = feedUrl;
+        cacheRSSAndPlay(feedUrl,bookmarked);
+ });
 
 }
 
@@ -296,7 +386,7 @@ function cacheRSSAndPlay(feedUrl, bookmarked){
   // get the feed data
   request(feedUrl,function(err, data){
     if (err){
-       console.log("error in request for "+feedurl+" err "+err);
+       console.log("error in request for "+feedUrl+" err "+err);
     }
     var fullPath = __dirname + "/cache";
     var fullFile = path.join(fullPath,fn);
@@ -319,8 +409,14 @@ function cacheRSSAndPlay(feedUrl, bookmarked){
           console.log("data not changed");
           if(bookmarked){
             var bookmark = bookmarked["lastPlayed"];
-            var toSeekTo = bookmarked["toSeekTo"] | 0;
-            var bookmark_index = new_urls.indexOf(bookmark);
+            var bookmark_index =  -1;
+            if(bookmark){
+              bookmark_index = new_urls.indexOf(bookmark);
+            }
+            var toSeekTo = bookmarked["toSeekTo"];
+            if(!toSeekTo){
+               toSeekTo = 0
+            }
             if(bookmark_index==-1){
                //doesn't contain our cached one, so we put that on the front of the new list. THis shouldn't happen!
                var toPlay = new_urls.unshift(bookmark);
@@ -409,41 +505,60 @@ function bindToEventBus(player, eventBus){
         eventBus.emit('playlist', msg);
       });
 
-      var pl = null;
+      var playlist = null;
 
       ['*'].forEach(function (topic) {
         eventBus.on(topic, function (args) {
+           //console.log(args);
            if(args["playlist"] && args["playlist"].length>0){
-             pl = args["playlist"][0];
-             console.log("pl");
-             console.log(pl);
-             if(pl && pl.length > 0){
-                writeConfig('config/playlist.json', playlist);               
-             }
+             playlist = args["playlist"];
+             //console.log("playlist");
+             //console.log(playlist);
+             //if(playlist && playlist.length > 0){
+             //   writeConfig('config/playlist.json', playlist);               
+             //}
            }
            if(args["player"]){
              var ply = args["player"];
-             console.log("ply");
-             console.log(ply);
+             //console.log("ply");
+             //console.log(ply);
              var error = ply["error"];
-             if(error){
+             var song_pos = ply["song"];
+             if(error && song_pos){
                 console.log("error in playback, skipping "+error);
                 // not sure about this means of handling errors
-                player.remove({"position":0});
+                player.remove({"position":song_pos});
                 player.play();
              }
              var sid = ply["songid"];
              var elapsed = ply["elapsed"];
-             var file = pl["file"];
-             console.log("player "+file+" elapsed "+elapsed);
-             if(file && elapsed){
-               if(!config[currentFeedUrl]){
-                  config[currentFeedUrl] = {};
+             if(playlist && song_pos && playlist[parseInt(song_pos)]){
+               var file = playlist[song_pos]["file"];
+               console.log("player "+file+" elapsed "+elapsed);
+               if(file && elapsed){
+
+                 var fullPath = __dirname;
+                 var fullFile = path.join(fullPath,"config/config.json");
+                 fs.readFile(fullFile,'utf8', function (err, data) {
+                   if (err) {
+                     console.log("no config file, that's ok");
+                   }
+                   var config = {};
+                   if(data){
+                     console.log("data");
+                     console.log(data);
+                     config = JSON.parse(data);
+                   }
+
+                   if(!config[currentFeedUrl]){
+                     config[currentFeedUrl] = {};
+                   }
+                   config[currentFeedUrl]["lastPlayed"]=file;
+                   config[currentFeedUrl]["toSeekTo"]=elapsed;
+                   console.log("saving config");
+                   writeConfig('config/config.json', config);               
+                 });
                }
-               config[currentFeedUrl]["lastPlayed"]=file;
-               config[currentFeedUrl]["toSeekTo"]=elapsed;
-               console.log("saving config");
-               writeConfig('config/config.json', config);               
              }
 
            }
@@ -454,26 +569,6 @@ function bindToEventBus(player, eventBus){
 }
 
 
-// read a json file
-
-function readConfig(file) {
-  console.log("path is "+file);
-  console.log("fs exists "+fs.existsSync(file)+" process "+process.env.HOME);
-  var fullPath = __dirname;
-  var fullFile = path.join(fullPath,file);
-  console.log(fs.existsSync(fullFile));
-  if ( fs.existsSync(fullFile) ) {
-    try{
-      return require(fullFile);
-    }catch(e){
-      console.log("problem "+e);
-      return {};
-    }
-  }else{
-    console.log("No config file");
-    return {};
-  }
-}
 
 // write a json file
 
