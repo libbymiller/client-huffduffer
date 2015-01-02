@@ -1,3 +1,5 @@
 *
 
 !.gitignore
+!physical-ui-config.json
+!data.json

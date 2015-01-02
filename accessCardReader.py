@@ -80,7 +80,7 @@ while True:
     try:
       # only send stop if it's the first no-card error we get
       if(currentId!=None):
-        print "posting - stop "+url
+        print "posting - stop "
         r = requests.post("http://localhost:5000/stopFromNFC", data="")
         print r
     except requests.ConnectionError:
