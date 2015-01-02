@@ -7,7 +7,7 @@ check process radiodan-server with pidfile /var/run/radiodan/radiodan-server.pid
 check process radiodan-huffduffer with pidfile /var/run/radiodan/radiodan-huffduffer.pid
   group radiodan
   start program = "/usr/sbin/service radiodan-huffduffer start"
-  stop program = "/usr/sbin/service radiodan-hufferduffer stop"
+  stop program = "/usr/sbin/service radiodan-huffduffer stop"
 
 check process radiodan-buttons with pidfile /var/run/radiodan/radiodan-buttons.pid
   group radiodan
