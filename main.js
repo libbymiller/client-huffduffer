@@ -441,6 +441,8 @@ function cacheRSSAndPlay(feedUrl, bookmarked){
     }else{
           console.log("no cache, data changed, writing file "+fullFile);
           writeFile(fullFile, new_urls_str);
+          console.log("new urls are");
+          console.log(new_urls);
           playWithSeek(new_urls, 0);
     }
   });
@@ -458,10 +460,17 @@ function playWithSeek(playlist, seek){
           }).then(player.play()).then(showPowerLed(colours.green));
 
   }else{
-          player.add({
-                  playlist: playlist,
-                  clear: true
-          }).then(player.play()).then(player.seek({"time":seek})).then(showPowerLed(colours.green));
+     player.add({clear: true, playlist: [fileOrStream]})
+       .then(player.play)
+       .then(function() {
+         return player.seek({ time: seek });
+       })
+       .then(showPowerLed(colours.green));
+
+//          player.add({
+  //                playlist: playlist,
+    //              clear: true
+      //    }).then(player.play()).then(player.seek({"time":seek})).then(showPowerLed(colours.green));
 
   }
 
@@ -472,6 +481,7 @@ function playWithSeek(playlist, seek){
 
 function getMatches(str){
    console.log("getting matches");
+   console.log(str);
    var results = [];
    var arrMatches = str.match(/<enclosure url=\"(.*?)\"/g);
    console.log(arrMatches);
