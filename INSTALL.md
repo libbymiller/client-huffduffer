@@ -1,0 +1,66 @@
+## Install wheezy on a card
+
+    diskutil list
+    diskutil unmountDisk /dev/diskn
+    sudo dd bs=1m if=~/Downloads/2015-05-05-raspbian-wheezy.img of=/dev/rdiskn
+
+## Provison a radiodan
+
+    git clone https://github.com/radiodan/provision
+    git checkout -b broker remotes/origin/broker
+    sudo LOG_LEVEL=DEBUG ./provision all
+
+## if on a pi2, reinstall allthe node modules in /opt/radiodan/apps/ subdirectories
+
+## check out the piab software
+
+Radiodan keeps its apps in /opt/radiodan/apps, so we’ll put it there. 
+    cd /opt/radiodan/apps 
+    sudo git clone https://github.com/libbymiller/radiodan-client-podcast.git 
+    cd radiodan-client-podcast/ 
+    sudo chown -R pi:pi .
+
+Install the dependences for node
+
+    npm install 
+
+
+and for the python nxppy code (for interacting with the NFC reader) 
+    cd 
+    sudo apt-get update 
+    sudo apt-get -y install build-essential python2.7-dev python-setuptools cmake 
+    curl -O https://bootstrap.pypa.io/get-pip.py 
+    sudo python get-pip.py 
+    sudo pip install requests
+
+Install nxppy: 
+    git clone https://github.com/svvitale/nxppy.git 
+    cd nxppy 
+    sudo python setup.py build install
+
+
+Make a small edit to the buttons interface: $ sudo pico /opt/radiodan/apps/buttons/current/lib/bootstrap.js 
+// Reverse the polarity of the neutron flow 
+// rgbOpts.reverse = true; 
+^^^ comment out this line, like this
+
+
+switch device type
+
+ sudo cp radiodan-type-offline-piab.conf /etc/supervisor/available/
+ sudo radiodan-device-type radiodan-type-offline-piab.conf
+
+
+reboot
+
+test
+
+curl -X POST http://localhost:5000/rssFromNFC -d "feedUrl=http://www.bbc.co.uk/programmes/b00lvdrj/episodes/downloads.rss"
+
+You should hear the podcast. Stop it like this:
+
+curl -X POST http://localhost:5000/stopFromNFC
+
+Attach the NFC reader
+
+...
