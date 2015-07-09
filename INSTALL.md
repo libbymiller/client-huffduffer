@@ -64,3 +64,8 @@ curl -X POST http://localhost:5000/stopFromNFC
 Attach the NFC reader
 
 ...
+
+
+add a crontab (as root?):
+
+    5 * * * * cd /opt/radiodan/apps/radiodan-client-podcast; /usr/local/bin/node cacher.js

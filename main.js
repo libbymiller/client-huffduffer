@@ -34,6 +34,19 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use('/radiodan', radiodanClient.middleware({crossOrigin: true}));
 bindToEventBus(player,eventBus);
 
+// Listen for updates to the music database
+// to make sure that we've loaded any
+// audio files in `./audio` before we try
+// and play them
+player.on('database.update.start', function() { console.log('database.update.start'); });
+player.on('database.update.end', function() { console.log('database.update.end'); });
+player.on('database.modified', function() { console.log('database.update.modified'); });
+
+
+// Tell the player to update its database, discovering
+// any audio files in the music directory specified in
+// the config file.
+player.updateDatabase();
 
 // config things
 var currentFeedUrl = null;
@@ -348,7 +361,8 @@ function addFeedURL(feedUrl){
           bookmarked = null;
         }
         currentFeedUrl = feedUrl;
-        cacheRSSAndPlay(feedUrl,bookmarked);
+        //cacheRSSAndPlay(feedUrl,bookmarked);
+        playFromCache(feedUrl,bookmarked);
  });
 
 }
@@ -359,6 +373,11 @@ function makeRSSName(feedUrl){
 
     var fn = feedUrl.replace(/^https?/,"");
     fn = fn.replace(/\W/g,"");
+    return fn;
+}
+
+function makeMp3Name(feedUrl){
+    var fn = feedUrl.replace(/.*\//,"");
     return fn;
 }
 
@@ -375,39 +394,38 @@ function makeRSSName(feedUrl){
 // or if there is no newer one play the next older one.
 
 
-function cacheRSSAndPlay(feedUrl, bookmarked){
+function playFromCache(feedUrl, bookmarked){
+
+// Tell the player to update its database, discovering
+// any audio files in the music directory specified in
+// the config file.
+  player.updateDatabase();
+
 
   //make a simplified name from the feedUrl
   
   var fn = makeRSSName(feedUrl);
   console.log("caching feedurl "+feedUrl+" as "+fn);
 
+  //check cache exists
+  var fullPath = __dirname + "/cache";
+  var fullFile = path.join(fullPath,fn);
 
-  // get the feed data
-  request(feedUrl,function(err, data){
-    if (err){
-       console.log("error in request for "+feedUrl+" err "+err);
-    }
-    var fullPath = __dirname + "/cache";
-    var fullFile = path.join(fullPath,fn);
+  // check the cache
+  console.log("Looking for cache "+fullFile);
+  var exists = fs.existsSync(fullFile);
+  console.log(exists +" exists");
 
-    // check the cache
-    console.log("Looking for cache "+fullFile);
-    var exists = fs.existsSync(fullFile);
-    console.log(exists +" exists");
-    var new_urls = getMatches(data.body);
-    var new_urls_str = new_urls.join("\n");
-
-    if(exists){
+  if(exists){
      // compare old and new data
 
-     fs.readFile(fullFile,'utf8', function (old_err, old_data) {
+     fs.readFile(fullFile,'utf8', function (err, data) {
         console.log("hello "+fullFile);
-        if (old_err) throw old_err;
-        console.log(old_data);
-        if(new_urls_str==old_data){
-          console.log("data not changed");
-          if(bookmarked){
+        if (err) throw err;
+        var new_urls = data.split("\n");
+        console.log("NEW URLS");
+        console.log(new_urls);
+        if(bookmarked){
             var bookmark = bookmarked["lastPlayed"];
             var bookmark_index =  -1;
             if(bookmark){
@@ -419,60 +437,47 @@ function cacheRSSAndPlay(feedUrl, bookmarked){
             }
             if(bookmark_index==-1){
                //doesn't contain our cached one, so we put that on the front of the new list. THis shouldn't happen!
-               var toPlay = new_urls.unshift(bookmark);
-               playWithSeek(toPlay, toSeekTo);
+///               var toPlay = new_urls.unshift(bookmark);
+//               playWithSeek(toPlay, toSeekTo);
+               playWithSeek(new_urls, toSeekTo);
             }else{
                //this is more likely - we are either at the start or somewhat through the  list, so we return it and everything after it   
                var toPlay = new_urls.slice(bookmark_index, new_urls.length);
                playWithSeek(toPlay, toSeekTo);
             }
-          }else{
+        }else{
             //just return the new list, no starting point or seek exists
             playWithSeek(new_urls, 0);
-          }
-
-        }else{
-          console.log("data changed, writing file "+fullFile);
-          console.log(new_urls);
-          writeFile(fullFile, new_urls_str);
-          playWithSeek(new_urls, 0);
         }
-      });      
-    }else{
-          console.log("no cache, data changed, writing file "+fullFile);
-          writeFile(fullFile, new_urls_str);
-          console.log("new urls are");
-          console.log(new_urls);
-          playWithSeek(new_urls, 0);
-    }
-  });
+     });      
+  }else{
+     console.log("no cache for his, sorry");
+  }
 
 }
+
 
 
 // Play a playlist (list of mp3s) and seek if we have a seek for the first one
 
 function playWithSeek(playlist, seek){
-  if(seek ==null || seek ==0){
-          player.add({
-                  playlist: playlist,
-                  clear: true
-          }).then(player.play()).then(showPowerLed(colours.green));
-
-  }else{
-     player.add({clear: true, playlist: [fileOrStream]})
-       .then(player.play)
-       .then(function() {
-         return player.seek({ time: seek });
-       })
-       .then(showPowerLed(colours.green));
-
-//          player.add({
-  //                playlist: playlist,
-    //              clear: true
-      //    }).then(player.play()).then(player.seek({"time":seek})).then(showPowerLed(colours.green));
-
+  console.log(playlist);
+  console.log("=====");
+//go through playlist, rewriting for cached version
+  var cached_urls_playlist = [];
+  for(var i=0; i< playlist.length; i++){
+     var pl = playlist[i];
+     var np = makeMp3Name(pl);
+     cached_urls_playlist.push(np);
   }
+
+  console.log(cached_urls_playlist);
+  player.add({clear: true, playlist: cached_urls_playlist})
+      .then(player.play)
+      .then(function() {
+        return player.seek({ time: seekTime });
+      })
+      .then(showPowerLed(colours.green));
 
 }
 
