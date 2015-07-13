@@ -1,11 +1,9 @@
-# Example Web App
+# Podcast in a box
 
-This application combines with the radiodan server to create a basic radio experience.
+Based on the Radiodan Example app.
+
+see http://planb.nicecupoftea.org/2015/01/03/raspberry-pi-podcast-in-a-box-step-by-step/
 
 ## Installation
 
-`npm install`
-
-## Running
-
-`node main.js` or `foreman start`
+see INSTALL.md
