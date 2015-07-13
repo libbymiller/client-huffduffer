@@ -10,9 +10,13 @@
     git checkout -b broker remotes/origin/broker
     sudo LOG_LEVEL=DEBUG ./provision all
 
-## if on a pi2, reinstall allthe node modules in /opt/radiodan/apps/ subdirectories
+## If on a pi2, reinstall all the node modules in /opt/radiodan/apps/ subdirectories
 
-## check out the piab software
+    cd /opt/radiodan/apps/...
+    rm -r node_modules
+    npm install
+
+## Check out the piab software
 
 Radiodan keeps its apps in /opt/radiodan/apps, so we’ll put it there. 
     cd /opt/radiodan/apps 
@@ -24,8 +28,8 @@ Install the dependences for node
 
     npm install 
 
+and for the python nxppy code (for interacting with the NFC reader)
 
-and for the python nxppy code (for interacting with the NFC reader) 
     cd 
     sudo apt-get update 
     sudo apt-get -y install build-essential python2.7-dev python-setuptools cmake 
@@ -34,32 +38,34 @@ and for the python nxppy code (for interacting with the NFC reader)
     sudo pip install requests
 
 Install nxppy: 
+
     git clone https://github.com/svvitale/nxppy.git 
     cd nxppy 
     sudo python setup.py build install
 
 
-Make a small edit to the buttons interface: $ sudo pico /opt/radiodan/apps/buttons/current/lib/bootstrap.js 
-// Reverse the polarity of the neutron flow 
-// rgbOpts.reverse = true; 
-^^^ comment out this line, like this
+Make a small edit to the buttons interface: 
 
+    $ sudo pico /opt/radiodan/apps/buttons/current/lib/bootstrap.js 
+
+    // Reverse the polarity of the neutron flow 
+    // rgbOpts.reverse = true; 
+    ^^^ comment out this line, like this
 
 switch device type
 
- sudo cp radiodan-type-offline-piab.conf /etc/supervisor/available/
- sudo radiodan-device-type radiodan-type-offline-piab.conf
-
+    sudo cp radiodan-type-offline-piab.conf /etc/supervisor/available/
+    sudo radiodan-device-type radiodan-type-offline-piab.conf
 
 reboot
 
 test
 
-curl -X POST http://localhost:5000/rssFromNFC -d "feedUrl=http://www.bbc.co.uk/programmes/b00lvdrj/episodes/downloads.rss"
+    curl -X POST http://localhost:5000/rssFromNFC -d "feedUrl=http://www.bbc.co.uk/programmes/b00lvdrj/episodes/downloads.rss"
 
 You should hear the podcast. Stop it like this:
 
-curl -X POST http://localhost:5000/stopFromNFC
+    curl -X POST http://localhost:5000/stopFromNFC
 
 Attach the NFC reader
 
