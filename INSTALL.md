@@ -19,6 +19,7 @@
 ## Check out the piab software
 
 Radiodan keeps its apps in /opt/radiodan/apps, so we’ll put it there. 
+
     cd /opt/radiodan/apps 
     sudo git clone https://github.com/libbymiller/radiodan-client-podcast.git 
     cd radiodan-client-podcast/ 
