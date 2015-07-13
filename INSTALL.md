@@ -75,8 +75,29 @@ You should hear the podcast. Stop it like this:
 
 Attach the NFC reader
 
-...
+http://www.ebay.co.uk/itm/251995292455
+http://www.instructables.com/id/Attendance-system-using-Raspberry-Pi-and-NFC-Tag-r/step3/The-software/
 
+enable spi
+
+then
+
+    sudo apt-get install python-dev
+    cd
+    git clone https://github.com/lthiery/SPI-Py
+
+and install it via
+
+    sudo python setup.py install
+    cd
+    git clone https://github.com/mxgxw/MFRC522-python.git
+    cd MFRC522-python
+
+test:
+
+    python Read.py
+
+...@@
 
 add a crontab (as root?):
 
