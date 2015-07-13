@@ -10,7 +10,9 @@
     git checkout -b broker remotes/origin/broker
     sudo LOG_LEVEL=DEBUG ./provision all
 
-## If anything fails, look at https://github.com/radiodan/provision/issues/3 and thereabouts - once nginx is installed the other problems will go away.
+## If anything fails...
+
+look at https://github.com/radiodan/provision/issues/3 and thereabouts - once nginx is installed the other problems will go away.
 
 
 ## If on a pi2, reinstall all the node modules in /opt/radiodan/apps/ subdirectories
