@@ -4,9 +4,15 @@
     diskutil unmountDisk /dev/diskn
     sudo dd bs=1m if=~/Downloads/2015-05-05-raspbian-wheezy.img of=/dev/rdiskn
 
+## sudo raspi-config
+
+expend file system
+reboot
+
 ## Provison a radiodan
 
     git clone https://github.com/radiodan/provision
+    cd provision
     git checkout -b broker remotes/origin/broker
     sudo LOG_LEVEL=DEBUG ./provision all
 
