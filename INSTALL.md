@@ -23,9 +23,15 @@ look at https://github.com/radiodan/provision/issues/3 and thereabouts - once ng
 
 ## If on a pi2, reinstall all the node modules in /opt/radiodan/apps/ subdirectories
 
-    cd /opt/radiodan/apps/...
+    cd /opt/radiodan/apps/buttons/current
     rm -r node_modules
     npm install
+
+and similarly for...
+
+    /opt/radiodan/apps/buttons/current
+    /opt/radiodan/apps/magic/current
+    /opt/radiodan/apps/server/current
 
 ## Check out the piab software
 
